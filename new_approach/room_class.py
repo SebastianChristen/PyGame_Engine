@@ -34,7 +34,8 @@ class Room:
     def get_description(self):
         return self.description
 
-    def add_item(self, item):
+    # HERE
+    def add_item(self, item, psotion x, psotion_y):
         self.items.append(item)
 
     def remove_item(self, item):
@@ -90,6 +91,10 @@ class Player:
     def __init__(self, starting_room):
         self.current_room = starting_room
         self.inventory = []
+        # HERE
+        self.position_within_room = 0,0
+
+    
 
     def take(self, item_name):
         for item in self.current_room.get_items():
@@ -111,12 +116,14 @@ class Player:
 class Renderer:
     def render_room(self, room):
         print("\n" + room.get_description())
-
+        # HERE
+        print("you are on postion" player.position_in_room
         items = room.get_items()
         if items:
-            print("You see: " + ", ".join(item.name for item in items))
+            # HERE
+            print("You see: " + ", ".join(item.name for item in items; in position x and y))
         else:
-            print("There is nothing here.")
+            print("There is nothing in this room...")
 
 
 # =========================
@@ -144,7 +151,14 @@ running = True
 while running:
     renderer.render_room(player.current_room)
 
-    command = input("\n> ").strip().lower()
+    # HERE
+    movement_module():
+            according to keyboad input, move player.position_within_room
+
+    
+
+
+
 
     if command == "quit":
         running = False
