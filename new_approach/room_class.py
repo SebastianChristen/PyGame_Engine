@@ -34,13 +34,11 @@ class Room:
     def get_description(self):
         return self.description
 
-    # HERE
-    def add_item(self, item, psotion x, psotion_y):
-        self.items.append(item)
+    def add_item(self, item, x, y):
+        self.items.append((item, x, y))
 
     def remove_item(self, item):
-        if item in self.items:
-            self.items.remove(item)
+        self.items = [(i, x, y) for (i, x, y) in self.items if i != item]
 
     def get_items(self):
         return self.items
@@ -91,16 +89,18 @@ class Player:
     def __init__(self, starting_room):
         self.current_room = starting_room
         self.inventory = []
-        # HERE
-        self.position_within_room = 0,0
+        self.position_within_room = (0, 0)
 
     
-
+    # TODO: Replace with a generic "interact", and make sure player facing direction matterns, instaed of standing ontop of the item.
     def take(self, item_name):
-        for item in self.current_room.get_items():
-            if item.name.lower() == item_name.lower():
+        player_x, player_y = self.position_within_room
+
+        for (item, item_x, item_y) in self.current_room.get_items():
+            if item.name.lower() == item_name.lower() and (item_x, item_y) == (player_x, player_y):
                 item.on_take(self)
                 return
+
         print("There is no such item here.")
 
     def show_inventory(self):
@@ -116,15 +116,35 @@ class Player:
 class Renderer:
     def render_room(self, room):
         print("\n" + room.get_description())
-        # HERE
-        print("you are on postion" player.position_in_room
+        
+        player_x, player_y = player.position_within_room
+        print(f"You are at position ({player_x}, {player_y})")
+        
         items = room.get_items()
+
         if items:
-            # HERE
-            print("You see: " + ", ".join(item.name for item in items; in position x and y))
+            for (item, x, y) in items:
+                print(f"You see: {item.name} at ({x}, {y})")
         else:
             print("There is nothing in this room...")
 
+
+def handle_movement(command, player):
+    x, y = player.position_within_room
+
+    if command == "w":
+        y -= 1
+    elif command == "s":
+        y += 1
+    elif command == "a":
+        x -= 1
+    elif command == "d":
+        x += 1
+    else:
+        return False
+
+    player.position_within_room = (x, y)
+    return True
 
 # =========================
 # SETUP
@@ -135,7 +155,7 @@ house = WhiteHouse(
 )
 
 stone = Stone("stone")
-house.add_item(stone)
+house.add_item(stone, 2, 5)
 
 player = Player(house)
 renderer = Renderer()
@@ -151,17 +171,13 @@ running = True
 while running:
     renderer.render_room(player.current_room)
 
-    # HERE
-    movement_module():
-            according to keyboad input, move player.position_within_room
-
-    
-
-
-
+    command = input("\n> ").strip().lower()
 
     if command == "quit":
         running = False
+
+    elif command in ["w", "a", "s", "d"]:
+        handle_movement(command, player)
 
     elif command.startswith("take "):
         item_name = command.replace("take ", "")
