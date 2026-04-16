@@ -6,7 +6,7 @@ class WorldFlags:
 
 
 # =========================
-# GAME CONTEXT
+# GAME
 # =========================
 class Game:
     def __init__(self):
@@ -17,6 +17,9 @@ class Game:
 
     def get_flag(self, key):
         return self.flags.get(key, False)
+
+
+game = Game()  # create early so classes can use it
 
 
 # =========================
@@ -35,7 +38,8 @@ class Room:
         self.items.append(item)
 
     def remove_item(self, item):
-        self.items.remove(item)
+        if item in self.items:
+            self.items.remove(item)
 
     def get_items(self):
         return self.items
@@ -88,7 +92,7 @@ class Player:
         self.inventory = []
 
     def take(self, item_name):
-        for item in self.current_room.items:
+        for item in self.current_room.get_items():
             if item.name.lower() == item_name.lower():
                 item.on_take(self)
                 return
@@ -101,22 +105,23 @@ class Player:
             print("You have: " + ", ".join(item.name for item in self.inventory))
 
 
-
-
-
+# =========================
+# RENDERER
+# =========================
 class Renderer:
     def render_room(self, room):
         print("\n" + room.get_description())
-        print(room.get_items())
 
-
+        items = room.get_items()
+        if items:
+            print("You see: " + ", ".join(item.name for item in items))
+        else:
+            print("There is nothing here.")
 
 
 # =========================
 # SETUP
 # =========================
-game = Game()
-
 house = WhiteHouse(
     name="White House",
     description="You are standing in front of a white house."
@@ -127,6 +132,7 @@ house.add_item(stone)
 
 player = Player(house)
 renderer = Renderer()
+
 
 # =========================
 # GAME LOOP
@@ -143,12 +149,9 @@ while running:
     if command == "quit":
         running = False
 
-    elif command == "look":
-        continue
-
     elif command.startswith("take "):
         item_name = command.replace("take ", "")
-        player.take(item_name, game)
+        player.take(item_name)
 
     elif command == "inventory":
         player.show_inventory()
