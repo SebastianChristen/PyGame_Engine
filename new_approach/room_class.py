@@ -28,7 +28,7 @@ class Room:
         self.description = description
         self.items = []
 
-    def get_description(self, game_context):
+    def get_description(self):
         return self.description
 
     def add_item(self, item):
@@ -37,15 +37,13 @@ class Room:
     def remove_item(self, item):
         self.items.remove(item)
 
-    def list_items(self):
-        if not self.items:
-            return "There is nothing here."
-        return "You see: " + ", ".join(item.name for item in self.items)
+    def get_items(self):
+        return self.items
 
-    def on_enter(self, game_context):
+    def on_enter(self):
         pass
 
-    def update(self, game_context):
+    def update(self):
         pass
 
 
@@ -53,8 +51,8 @@ class Room:
 # SPECIAL ROOM
 # =========================
 class WhiteHouse(Room):
-    def get_description(self, game_context):
-        if game_context.get_flag(WorldFlags.HOUSE_COLLAPSED):
+    def get_description(self):
+        if game.get_flag(WorldFlags.HOUSE_COLLAPSED):
             return "You are standing on ruins. The house has collapsed."
         return self.description
 
@@ -66,7 +64,7 @@ class Item:
     def __init__(self, name):
         self.name = name
 
-    def on_take(self, player, game_context):
+    def on_take(self, player):
         player.inventory.append(self)
         player.current_room.remove_item(self)
 
@@ -74,11 +72,11 @@ class Item:
 
 # Special item with effect
 class Stone(Item):
-    def on_take(self, player, game_context):
-        super().on_take(player, game_context)
+    def on_take(self, player):
+        super().on_take(player)
 
         print("The ground trembles...")
-        game_context.set_flag(WorldFlags.HOUSE_COLLAPSED)
+        game.set_flag(WorldFlags.HOUSE_COLLAPSED)
 
 
 # =========================
@@ -89,14 +87,10 @@ class Player:
         self.current_room = starting_room
         self.inventory = []
 
-    def look(self, game_context):
-        print("\n" + self.current_room.get_description(game_context))
-        print(self.current_room.list_items())
-
-    def take(self, item_name, game_context):
+    def take(self, item_name):
         for item in self.current_room.items:
             if item.name.lower() == item_name.lower():
-                item.on_take(self, game_context)
+                item.on_take(self)
                 return
         print("There is no such item here.")
 
@@ -105,6 +99,17 @@ class Player:
             print("Your inventory is empty.")
         else:
             print("You have: " + ", ".join(item.name for item in self.inventory))
+
+
+
+
+
+class Renderer:
+    def render_room(self, room):
+        print("\n" + room.get_description())
+        print(room.get_items())
+
+
 
 
 # =========================
@@ -121,6 +126,7 @@ stone = Stone("stone")
 house.add_item(stone)
 
 player = Player(house)
+renderer = Renderer()
 
 # =========================
 # GAME LOOP
@@ -130,7 +136,7 @@ print("Welcome.\n")
 running = True
 
 while running:
-    player.look(game)
+    renderer.render_room(player.current_room)
 
     command = input("\n> ").strip().lower()
 
