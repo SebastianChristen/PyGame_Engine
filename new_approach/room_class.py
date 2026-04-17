@@ -32,6 +32,9 @@ game = Game()
 # TILE SYSTEM
 # =========================
 class Tile:
+    def __init__(self):
+        pass
+
     symbol: str = "?"
     walkable: bool = True
 
