@@ -19,17 +19,30 @@ class Game:
         return self.flags.get(key, False)
 
 
-game = Game()  # create early so classes can use it
+game = Game()
+
+
+# =========================
+# TILE DEFINITIONS
+# =========================
+TILES = {
+    "W": {"name": "wall", "walkable": False},
+    ".": {"name": "floor", "walkable": True},
+}
 
 
 # =========================
 # ROOM
 # =========================
 class Room:
-    def __init__(self, name="", description=""):
+    def __init__(self, name="", description="", tilemap=None):
         self.name = name
         self.description = description
         self.items = []
+        self.tilemap = tilemap or []
+
+        self.height = len(self.tilemap)
+        self.width = len(self.tilemap[0]) if self.tilemap else 0
 
     def get_description(self):
         return self.description
@@ -42,6 +55,21 @@ class Room:
 
     def get_items(self):
         return self.items
+
+    # ---------- TILE LOGIC ----------
+    def in_bounds(self, x, y):
+        return 0 <= x < self.width and 0 <= y < self.height
+
+    def get_tile(self, x, y):
+        if not self.in_bounds(x, y):
+            return None
+        return self.tilemap[y][x]
+
+    def is_walkable(self, x, y):
+        tile = self.get_tile(x, y)
+        if tile is None:
+            return False
+        return TILES[tile]["walkable"]
 
     def on_enter(self):
         pass
@@ -89,7 +117,7 @@ class Player:
     def __init__(self, starting_room):
         self.current_room = starting_room
         self.inventory = []
-        self.position_within_room = (0, 0)
+        self.position_within_room = (1, 1)
 
     
     # TODO: Replace with a generic "interact", and make sure player facing direction matterns, instaed of standing ontop of the item.
@@ -114,12 +142,31 @@ class Player:
 # RENDERER
 # =========================
 class Renderer:
-    def render_room(self, room):
+    def render_room(self, player):
+        room = player.current_room
+
         print("\n" + room.get_description())
-        
-        player_x, player_y = player.position_within_room
-        print(f"You are at position ({player_x}, {player_y})")
-        
+
+        px, py = player.position_within_room
+        print(f"Position: ({px}, {py})\n")
+
+        # build grid copy
+        grid = [list(row) for row in room.tilemap]
+
+        # draw items
+        for (item, x, y) in room.get_items():
+            if room.in_bounds(x, y):
+                grid[y][x] = "I"
+
+        # draw player
+        if room.in_bounds(px, py):
+            grid[py][px] = "P"
+
+        # render grid
+        for row in grid:
+            print("".join(row))
+
+        # list items (debug-style)
         items = room.get_items()
 
         if items:
@@ -129,33 +176,56 @@ class Renderer:
             print("There is nothing in this room...")
 
 
+# =========================
+# MOVEMENT (WITH COLLISION)
+# =========================
 def handle_movement(command, player):
     x, y = player.position_within_room
 
-    if command == "w":
-        y -= 1
-    elif command == "s":
-        y += 1
-    elif command == "a":
-        x -= 1
-    elif command == "d":
-        x += 1
-    else:
-        return False
+    dx, dy = 0, 0
 
-    player.position_within_room = (x, y)
-    return True
+    if command == "w":
+        dy = -1
+    elif command == "s":
+        dy = 1
+    elif command == "a":
+        dx = -1
+    elif command == "d":
+        dx = 1
+    else:
+        return
+
+    new_x = x + dx
+    new_y = y + dy
+
+    if player.current_room.is_walkable(new_x, new_y):
+        player.position_within_room = (new_x, new_y)
+    else:
+        print("You bump into something.")
+
 
 # =========================
 # SETUP
 # =========================
+house_map = [
+    "WWWWWWWWWW",
+    "W........W",
+    "W........W",
+    "W........W",
+    "W........W",
+    "W........W",
+    "W........W",
+    "WWWWWWWWWW",
+]
+
 house = WhiteHouse(
     name="White House",
-    description="You are standing in front of a white house."
+    description="You are standing in front of a white house.",
+    tilemap=house_map
 )
 
 stone = Stone("stone")
-house.add_item(stone, 2, 5)
+house.add_item(stone, 4, 3)
 
 player = Player(house)
 renderer = Renderer()
@@ -169,7 +239,7 @@ print("Welcome.\n")
 running = True
 
 while running:
-    renderer.render_room(player.current_room)
+    renderer.render_room(player)
 
     command = input("\n> ").strip().lower()
 
