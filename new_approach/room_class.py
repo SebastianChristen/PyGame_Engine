@@ -1,80 +1,126 @@
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Dict, List, Tuple, Optional
+
+
 # =========================
 # FLAGS
 # =========================
-class WorldFlags:
-    HOUSE_COLLAPSED = "house_collapsed"
+class WorldFlag(Enum):
+    HOUSE_COLLAPSED = auto()
 
 
 # =========================
 # GAME
 # =========================
 class Game:
-    def __init__(self):
-        self.flags = {}
+    def __init__(self) -> None:
+        self.flags: set[WorldFlag] = set()
 
-    def set_flag(self, key, value=True):
-        self.flags[key] = value
+    def set_flag(self, flag: WorldFlag) -> None:
+        self.flags.add(flag)
 
-    def get_flag(self, key):
-        return self.flags.get(key, False)
+    def has_flag(self, flag: WorldFlag) -> bool:
+        return flag in self.flags
 
 
 game = Game()
 
 
 # =========================
-# TILE DEFINITIONS
+# TILE SYSTEM
 # =========================
-TILES = {
-    "W": {"name": "wall", "walkable": False},
-    ".": {"name": "floor", "walkable": True},
-}
+class Tile:
+    symbol: str = "?"
+    walkable: bool = True
+
+    def on_step(self, player: Player) -> None:
+        pass
+
+    @classmethod
+    def create_registry(cls) -> Dict[str, Tile]:
+        return {
+            FloorTile.symbol: FloorTile(),
+            WallTile.symbol: WallTile(),
+        }
+
+
+class FloorTile(Tile):
+    symbol = "."
+    walkable = True
+
+    def on_step(self, player: Player) -> None:
+        print("You hear a soft footstep.")
+
+
+class WallTile(Tile):
+    symbol = "W"
+    walkable = False
+
+
+TILE_REGISTRY: Dict[str, Tile] = Tile.create_registry()
+
+
+# =========================
+# DATA STRUCTURES
+# =========================
+@dataclass
+class PositionedItem:
+    item: Item
+    x: int
+    y: int
 
 
 # =========================
 # ROOM
 # =========================
 class Room:
-    def __init__(self, name="", description="", tilemap=None):
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        tilemap: List[str]
+    ) -> None:
         self.name = name
         self.description = description
-        self.items = []
-        self.tilemap = tilemap or []
+        self.tilemap = tilemap
+        self.items: List[PositionedItem] = []
 
-        self.height = len(self.tilemap)
-        self.width = len(self.tilemap[0]) if self.tilemap else 0
+        self.height: int = len(tilemap)
+        self.width: int = len(tilemap[0]) if tilemap else 0
 
-    def get_description(self):
+    def get_description(self) -> str:
         return self.description
 
-    def add_item(self, item, x, y):
-        self.items.append((item, x, y))
+    def add_item(self, item: Item, x: int, y: int) -> None:
+        self.items.append(PositionedItem(item, x, y))
 
-    def remove_item(self, item):
-        self.items = [(i, x, y) for (i, x, y) in self.items if i != item]
+    def remove_item(self, item: Item) -> None:
+        self.items = [i for i in self.items if i.item != item]
 
-    def get_items(self):
+    def get_items(self) -> List[PositionedItem]:
         return self.items
 
-    # ---------- TILE LOGIC ----------
-    def in_bounds(self, x, y):
+    def in_bounds(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
 
-    def get_tile(self, x, y):
+    def get_tile(self, x: int, y: int) -> Optional[Tile]:
         if not self.in_bounds(x, y):
             return None
-        return self.tilemap[y][x]
 
-    def is_walkable(self, x, y):
+        symbol = self.tilemap[y][x]
+
+        if symbol not in TILE_REGISTRY:
+            raise ValueError(f"Unknown tile symbol: {symbol}")
+
+        return TILE_REGISTRY[symbol]
+
+    def is_walkable(self, x: int, y: int) -> bool:
         tile = self.get_tile(x, y)
-        if tile is None:
-            return False
-        return TILES[tile]["walkable"]
+        return tile.walkable if tile else False
 
-    def on_enter(self):
-        pass
-
-    def update(self):
+    def update(self) -> None:
         pass
 
 
@@ -82,8 +128,8 @@ class Room:
 # SPECIAL ROOM
 # =========================
 class WhiteHouse(Room):
-    def get_description(self):
-        if game.get_flag(WorldFlags.HOUSE_COLLAPSED):
+    def get_description(self) -> str:
+        if game.has_flag(WorldFlag.HOUSE_COLLAPSED):
             return "You are standing on ruins. The house has collapsed."
         return self.description
 
@@ -92,114 +138,118 @@ class WhiteHouse(Room):
 # ITEM
 # =========================
 class Item:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
 
-    def on_take(self, player):
+    def on_take(self, player: Player) -> None:
         player.inventory.append(self)
         player.current_room.remove_item(self)
-
         print(f"You take the {self.name}.")
 
-# Special item with effect
-class Stone(Item):
-    def on_take(self, player):
-        super().on_take(player)
 
+class Stone(Item):
+    def on_take(self, player: Player) -> None:
+        super().on_take(player)
         print("The ground trembles...")
-        game.set_flag(WorldFlags.HOUSE_COLLAPSED)
+        game.set_flag(WorldFlag.HOUSE_COLLAPSED)
 
 
 # =========================
 # PLAYER
 # =========================
 class Player:
-    def __init__(self, starting_room):
-        self.current_room = starting_room
-        self.inventory = []
-        self.position_within_room = (1, 1)
+    def __init__(self, starting_room: Room) -> None:
+        self.current_room: Room = starting_room
+        self.inventory: List[Item] = []
+        self.position: Tuple[int, int] = (1, 1)
 
-    
-    # TODO: Replace with a generic "interact", and make sure player facing direction matterns, instaed of standing ontop of the item.
-    def take(self, item_name):
-        player_x, player_y = self.position_within_room
+    def take(self, item_name: str) -> None:
+        px, py = self.position
 
-        for (item, item_x, item_y) in self.current_room.get_items():
-            if item.name.lower() == item_name.lower() and (item_x, item_y) == (player_x, player_y):
-                item.on_take(self)
+        for positioned in self.current_room.get_items():
+            if (
+                positioned.item.name.lower() == item_name.lower()
+                and (positioned.x, positioned.y) == (px, py)
+            ):
+                positioned.item.on_take(self)
                 return
 
         print("There is no such item here.")
 
-    def show_inventory(self):
+    def show_inventory(self) -> None:
         if not self.inventory:
             print("Your inventory is empty.")
         else:
-            print("You have: " + ", ".join(item.name for item in self.inventory))
+            print("You have:", ", ".join(i.name for i in self.inventory))
 
 
 # =========================
 # RENDERER
 # =========================
 class Renderer:
-    def render_room(self, player):
+    def render_room(self, player: Player) -> None:
         room = player.current_room
 
         print("\n" + room.get_description())
 
-        px, py = player.position_within_room
+        px, py = player.position
         print(f"Position: ({px}, {py})\n")
 
-        # build grid copy
         grid = [list(row) for row in room.tilemap]
 
-        # draw items
-        for (item, x, y) in room.get_items():
-            if room.in_bounds(x, y):
-                grid[y][x] = "I"
+        for positioned in room.get_items():
+            if room.in_bounds(positioned.x, positioned.y):
+                grid[positioned.y][positioned.x] = "I"
 
-        # draw player
         if room.in_bounds(px, py):
             grid[py][px] = "P"
 
-        # render grid
         for row in grid:
             print("".join(row))
 
-        # list items (debug-style)
-        items = room.get_items()
-
-        if items:
-            for (item, x, y) in items:
-                print(f"You see: {item.name} at ({x}, {y})")
+        if room.get_items():
+            for p in room.get_items():
+                print(f"You see: {p.item.name} at ({p.x}, {p.y})")
         else:
             print("There is nothing in this room...")
 
 
 # =========================
-# MOVEMENT (WITH COLLISION)
+# MOVEMENT
 # =========================
-def handle_movement(command, player):
-    x, y = player.position_within_room
+class Direction(Enum):
+    UP = auto()
+    DOWN = auto()
+    LEFT = auto()
+    RIGHT = auto()
 
-    dx, dy = 0, 0
 
-    if command == "w":
-        dy = -1
-    elif command == "s":
-        dy = 1
-    elif command == "a":
-        dx = -1
-    elif command == "d":
-        dx = 1
-    else:
-        return
+INPUT_MAP: Dict[str, Direction] = {
+    "w": Direction.UP,
+    "s": Direction.DOWN,
+    "a": Direction.LEFT,
+    "d": Direction.RIGHT,
+}
+
+
+def handle_movement(direction: Direction, player: Player) -> None:
+    x, y = player.position
+
+    dx, dy = {
+        Direction.UP: (0, -1),
+        Direction.DOWN: (0, 1),
+        Direction.LEFT: (-1, 0),
+        Direction.RIGHT: (1, 0),
+    }[direction]
 
     new_x = x + dx
     new_y = y + dy
 
-    if player.current_room.is_walkable(new_x, new_y):
-        player.position_within_room = (new_x, new_y)
+    tile = player.current_room.get_tile(new_x, new_y)
+
+    if tile and tile.walkable:
+        player.position = (new_x, new_y)
+        tile.on_step(player)
     else:
         print("You bump into something.")
 
@@ -246,12 +296,11 @@ while running:
     if command == "quit":
         running = False
 
-    elif command in ["w", "a", "s", "d"]:
-        handle_movement(command, player)
+    elif command in INPUT_MAP:
+        handle_movement(INPUT_MAP[command], player)
 
     elif command.startswith("take "):
-        item_name = command.replace("take ", "")
-        player.take(item_name)
+        player.take(command.replace("take ", ""))
 
     elif command == "inventory":
         player.show_inventory()
