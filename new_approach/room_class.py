@@ -309,6 +309,9 @@ def handle_events(player: Player) -> bool:
             elif event.key == pygame.K_e:
                 player.take()
 
+            elif event.key == pygame.K_TAB:
+                player.show_inventory()
+
     return True
 
 
