@@ -1,7 +1,25 @@
+# =========================
+# IMPORTS
+# =========================
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Dict, List, Tuple, Optional
+
+import pygame
+
+
+# =========================
+# CONFIG
+# =========================
+TILE_SIZE: int = 48
+FPS: int = 60
+
+COLOR_BG = (20, 20, 20)
+COLOR_FLOOR = (90, 90, 90)
+COLOR_WALL = (45, 45, 45)
+COLOR_PLAYER = (255, 255, 255)
+COLOR_ITEM = (220, 180, 40)
 
 
 # =========================
@@ -32,11 +50,9 @@ game = Game()
 # TILE SYSTEM
 # =========================
 class Tile:
-    def __init__(self):
-        pass
-
     symbol: str = "?"
     walkable: bool = True
+    color: Tuple[int, int, int] = COLOR_FLOOR
 
     def on_step(self, player: Player) -> None:
         pass
@@ -52,7 +68,8 @@ class Tile:
 class FloorTile(Tile):
     symbol = "."
     walkable = True
-
+    color = COLOR_FLOOR
+    
     def on_step(self, player: Player) -> None:
         print("You hear a soft footstep.")
 
@@ -60,13 +77,14 @@ class FloorTile(Tile):
 class WallTile(Tile):
     symbol = "W"
     walkable = False
+    color = COLOR_WALL
 
 
 TILE_REGISTRY: Dict[str, Tile] = Tile.create_registry()
 
 
 # =========================
-# DATA STRUCTURES
+# DATA
 # =========================
 @dataclass
 class PositionedItem:
@@ -113,23 +131,13 @@ class Room:
             return None
 
         symbol = self.tilemap[y][x]
-
-        if symbol not in TILE_REGISTRY:
-            raise ValueError(f"Unknown tile symbol: {symbol}")
-
-        return TILE_REGISTRY[symbol]
+        return TILE_REGISTRY.get(symbol)
 
     def is_walkable(self, x: int, y: int) -> bool:
         tile = self.get_tile(x, y)
         return tile.walkable if tile else False
 
-    def update(self) -> None:
-        pass
 
-
-# =========================
-# SPECIAL ROOM
-# =========================
 class WhiteHouse(Room):
     def get_description(self) -> str:
         if game.has_flag(WorldFlag.HOUSE_COLLAPSED):
@@ -166,18 +174,15 @@ class Player:
         self.inventory: List[Item] = []
         self.position: Tuple[int, int] = (1, 1)
 
-    def take(self, item_name: str) -> None:
+    def take(self) -> None:
         px, py = self.position
 
         for positioned in self.current_room.get_items():
-            if (
-                positioned.item.name.lower() == item_name.lower()
-                and (positioned.x, positioned.y) == (px, py)
-            ):
+            if (positioned.x, positioned.y) == (px, py):
                 positioned.item.on_take(self)
                 return
 
-        print("There is no such item here.")
+        print("There is nothing here to take.")
 
     def show_inventory(self) -> None:
         if not self.inventory:
@@ -190,31 +195,61 @@ class Player:
 # RENDERER
 # =========================
 class Renderer:
+    def __init__(self, room: Room) -> None:
+        pygame.init()
+
+        self.screen_width = room.width * TILE_SIZE
+        self.screen_height = room.height * TILE_SIZE
+
+        self.screen = pygame.display.set_mode(
+            (self.screen_width, self.screen_height)
+        )
+        pygame.display.set_caption("Tile Engine")
+
+        self.clock = pygame.time.Clock()
+
     def render_room(self, player: Player) -> None:
         room = player.current_room
+        self.screen.fill(COLOR_BG)
 
-        print("\n" + room.get_description())
+        # draw tiles
+        for y in range(room.height):
+            for x in range(room.width):
+                tile = room.get_tile(x, y)
+                if tile is None:
+                    continue
 
-        px, py = player.position
-        print(f"Position: ({px}, {py})\n")
+                rect = pygame.Rect(
+                    x * TILE_SIZE,
+                    y * TILE_SIZE,
+                    TILE_SIZE,
+                    TILE_SIZE
+                )
 
-        grid = [list(row) for row in room.tilemap]
+                pygame.draw.rect(self.screen, tile.color, rect)
 
+        # draw items
         for positioned in room.get_items():
-            if room.in_bounds(positioned.x, positioned.y):
-                grid[positioned.y][positioned.x] = "I"
+            rect = pygame.Rect(
+                positioned.x * TILE_SIZE + 12,
+                positioned.y * TILE_SIZE + 12,
+                TILE_SIZE - 24,
+                TILE_SIZE - 24
+            )
+            pygame.draw.rect(self.screen, COLOR_ITEM, rect)
 
-        if room.in_bounds(px, py):
-            grid[py][px] = "P"
+        # draw player
+        px, py = player.position
+        rect = pygame.Rect(
+            px * TILE_SIZE + 8,
+            py * TILE_SIZE + 8,
+            TILE_SIZE - 16,
+            TILE_SIZE - 16
+        )
+        pygame.draw.rect(self.screen, COLOR_PLAYER, rect)
 
-        for row in grid:
-            print("".join(row))
-
-        if room.get_items():
-            for p in room.get_items():
-                print(f"You see: {p.item.name} at ({p.x}, {p.y})")
-        else:
-            print("There is nothing in this room...")
+        pygame.display.flip()
+        self.clock.tick(FPS)
 
 
 # =========================
@@ -225,14 +260,6 @@ class Direction(Enum):
     DOWN = auto()
     LEFT = auto()
     RIGHT = auto()
-
-
-INPUT_MAP: Dict[str, Direction] = {
-    "w": Direction.UP,
-    "s": Direction.DOWN,
-    "a": Direction.LEFT,
-    "d": Direction.RIGHT,
-}
 
 
 def handle_movement(direction: Direction, player: Player) -> None:
@@ -253,8 +280,36 @@ def handle_movement(direction: Direction, player: Player) -> None:
     if tile and tile.walkable:
         player.position = (new_x, new_y)
         tile.on_step(player)
-    else:
-        print("You bump into something.")
+
+
+# =========================
+# INPUT
+# =========================
+def handle_events(player: Player) -> bool:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return False
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                return False
+
+            elif event.key == pygame.K_w:
+                handle_movement(Direction.UP, player)
+
+            elif event.key == pygame.K_s:
+                handle_movement(Direction.DOWN, player)
+
+            elif event.key == pygame.K_a:
+                handle_movement(Direction.LEFT, player)
+
+            elif event.key == pygame.K_d:
+                handle_movement(Direction.RIGHT, player)
+
+            elif event.key == pygame.K_e:
+                player.take()
+
+    return True
 
 
 # =========================
@@ -281,32 +336,16 @@ stone = Stone("stone")
 house.add_item(stone, 4, 3)
 
 player = Player(house)
-renderer = Renderer()
+renderer = Renderer(house)
 
 
 # =========================
 # GAME LOOP
 # =========================
-print("Welcome.\n")
-
 running = True
 
 while running:
+    running = handle_events(player)
     renderer.render_room(player)
 
-    command = input("\n> ").strip().lower()
-
-    if command == "quit":
-        running = False
-
-    elif command in INPUT_MAP:
-        handle_movement(INPUT_MAP[command], player)
-
-    elif command.startswith("take "):
-        player.take(command.replace("take ", ""))
-
-    elif command == "inventory":
-        player.show_inventory()
-
-    else:
-        print("Unknown command.")
+pygame.quit()
