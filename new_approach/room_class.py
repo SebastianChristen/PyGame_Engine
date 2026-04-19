@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Dict, List, Tuple, Optional
 
+import os
 import pygame
 
 
@@ -15,11 +16,11 @@ import pygame
 TILE_SIZE: int = 48
 FPS: int = 60
 
+ASSET_PATH = "./tiles/"
+PLAYER_IMAGE = "./tiles/player.png"
+ITEM_IMAGE = "./tiles/item.png"
+
 COLOR_BG = (20, 20, 20)
-COLOR_FLOOR = (90, 90, 90)
-COLOR_WALL = (45, 45, 45)
-COLOR_PLAYER = (255, 255, 255)
-COLOR_ITEM = (220, 180, 40)
 
 
 # =========================
@@ -52,7 +53,7 @@ game = Game()
 class Tile:
     symbol: str = "?"
     walkable: bool = True
-    color: Tuple[int, int, int] = COLOR_FLOOR
+    image_name: str = ""
 
     def on_step(self, player: Player) -> None:
         pass
@@ -68,8 +69,8 @@ class Tile:
 class FloorTile(Tile):
     symbol = "."
     walkable = True
-    color = COLOR_FLOOR
-    
+    image_name = "carpet_1.png"
+
     def on_step(self, player: Player) -> None:
         print("You hear a soft footstep.")
 
@@ -77,7 +78,7 @@ class FloorTile(Tile):
 class WallTile(Tile):
     symbol = "W"
     walkable = False
-    color = COLOR_WALL
+    image_name = "wall_1.png"
 
 
 TILE_REGISTRY: Dict[str, Tile] = Tile.create_registry()
@@ -208,6 +209,26 @@ class Renderer:
 
         self.clock = pygame.time.Clock()
 
+        self.tile_surfaces = self._load_tile_surfaces()
+        self.player_surface = self._load_sprite(PLAYER_IMAGE)
+        self.item_surface = self._load_sprite(ITEM_IMAGE)
+
+    def _load_sprite(self, path: str) -> pygame.Surface:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Missing sprite: {path}")
+
+        surface = pygame.image.load(path).convert_alpha()
+        return pygame.transform.scale(surface, (TILE_SIZE, TILE_SIZE))
+
+    def _load_tile_surfaces(self) -> Dict[str, pygame.Surface]:
+        surfaces: Dict[str, pygame.Surface] = {}
+
+        for symbol, tile in TILE_REGISTRY.items():
+            full_path = os.path.join(ASSET_PATH, tile.image_name)
+            surfaces[symbol] = self._load_sprite(full_path)
+
+        return surfaces
+
     def render_room(self, player: Player) -> None:
         room = player.current_room
         self.screen.fill(COLOR_BG)
@@ -216,37 +237,31 @@ class Renderer:
         for y in range(room.height):
             for x in range(room.width):
                 tile = room.get_tile(x, y)
+
                 if tile is None:
                     continue
 
-                rect = pygame.Rect(
-                    x * TILE_SIZE,
-                    y * TILE_SIZE,
-                    TILE_SIZE,
-                    TILE_SIZE
-                )
+                surface = self.tile_surfaces[tile.symbol]
 
-                pygame.draw.rect(self.screen, tile.color, rect)
+                self.screen.blit(
+                    surface,
+                    (x * TILE_SIZE, y * TILE_SIZE)
+                )
 
         # draw items
         for positioned in room.get_items():
-            rect = pygame.Rect(
-                positioned.x * TILE_SIZE + 12,
-                positioned.y * TILE_SIZE + 12,
-                TILE_SIZE - 24,
-                TILE_SIZE - 24
+            self.screen.blit(
+                self.item_surface,
+                (positioned.x * TILE_SIZE, positioned.y * TILE_SIZE)
             )
-            pygame.draw.rect(self.screen, COLOR_ITEM, rect)
 
         # draw player
         px, py = player.position
-        rect = pygame.Rect(
-            px * TILE_SIZE + 8,
-            py * TILE_SIZE + 8,
-            TILE_SIZE - 16,
-            TILE_SIZE - 16
+
+        self.screen.blit(
+            self.player_surface,
+            (px * TILE_SIZE, py * TILE_SIZE)
         )
-        pygame.draw.rect(self.screen, COLOR_PLAYER, rect)
 
         pygame.display.flip()
         self.clock.tick(FPS)
